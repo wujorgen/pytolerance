@@ -43,14 +43,14 @@ class Distribution:
             case _:  # normal
                 pass  # defined before match statement
 
-    def ll(self, theta:ArrayLike):
+    def ll(self, theta):
         """Returns log-likelihood.
 
         :param theta:
         """
         return np.sum(self.dist.logpdf(self.data, *theta))
 
-    def nll(self, theta:ArrayLike):
+    def nll(self, theta):
         """Returns negative log-likelihood.
 
         :param theta:
