@@ -1,6 +1,6 @@
 from subprocess import PIPE, Popen
 
-'''
+#'''
 def _process(command):
     p = Popen(command, stdout=PIPE, stdin=PIPE)
     out, err = p.communicate()
@@ -19,4 +19,4 @@ def test_flake8():
 
 def test_isort():
    assert _process(["isort", "--check", "./pytolerance"])
-'''
+#'''

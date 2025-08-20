@@ -1,7 +1,7 @@
 matplotlib
 numpy
 pandas
-scipy==1.15.2
+scipy==1.15.2  # 1.16 moved from the FORTRAN 77 SLSQP solver to a C based one, which seems to have errors in usage here.
 scikit-learn  # sklearn
 setuptools
 pytest

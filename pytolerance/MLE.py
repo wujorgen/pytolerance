@@ -13,7 +13,7 @@ class MLE:
         :return sol.x:
         :raise Error:
         """
-        if type(dist) == Distribution:
+        if isinstance(dist, Distribution):  # type(dist) == Distribution
             pass
             # MLE.fit_dist()
         else:
@@ -21,8 +21,12 @@ class MLE:
             pass
 
     @staticmethod
-    def fit_dist(dist: Distribution | ArrayLike, method:str="SLSQP", verbose: bool = False):
-        sol = minimize(dist.nll, x0=dist.x0, method=method, constraints=dist.constraints)
+    def fit_dist(
+        dist: Distribution | ArrayLike, method: str = "SLSQP", verbose: bool = False
+    ):
+        sol = minimize(
+            dist.nll, x0=dist.x0, method=method, constraints=dist.constraints
+        )
         if verbose:
             print(sol)
         return sol

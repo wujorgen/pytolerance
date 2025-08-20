@@ -1,2 +1,2 @@
-from .distribution import Distribution
-from .MLE import MLE
+from .distribution import Distribution  # noqa F401
+from .MLE import MLE  # noqa F401
