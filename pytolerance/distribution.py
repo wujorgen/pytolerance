@@ -1,8 +1,83 @@
+from abc import ABC, abstractmethod
 import numpy as np
 import scipy
 from numpy.typing import ArrayLike
+from scipy.stats._distn_infrastructure import rv_continuous
 
 from .__info__ import AVAILABLE_DISTRIBUTIONS, EPS
+
+
+class BaseDistribution(ABC):
+    """Abstract Base Class for Distribution objects. Must be extended to a specific distribution family."""
+    def __init__(self, data, left_censored_data, right_censored_data, left_interval_data, right_interval_data, conventional_form:bool=False):
+        self.data = data
+        self.left_censored_data = left_censored_data
+        self.right_censored_data = right_censored_data
+        self.left_interval_data = left_interval_data
+        self.right_interval_data = right_interval_data
+        self.conventional_form = conventional_form
+        self._sol = None
+        self._params = {}
+        self._cache_TL = {}  # cache the calculated tolerance limit values for future use, following convention of [U/L/D][confidence]/[coverage]
+
+    @property
+    @abstractmethod
+    def dist(self) -> rv_continuous:
+        """Returns a reference to the SciPy stats family."""
+
+    @property
+    @abstractmethod
+    def params(self) -> dict:
+        """Returns a dict of the distribution parameters."""
+
+    @property
+    @abstractmethod
+    def _MLEconstraints(self) -> list[dict]:
+        """Returns constraints on parameter feasibility needed for MLE.
+        """
+
+    def ll(self, theta):
+        """Returns log-likelihood.
+
+        :param theta:
+        :return:
+        """
+        tmp = self.dist.logpdf(self.data, *theta)
+        if self.right_censored_data is not None:
+            tmp = np.append(tmp, self.dist.logsf(self.right_censored_data, *theta))
+        if self.left_censored_data is not None:
+            tmp = np.append(tmp, self.dist.logcdf(self.left_censored_data, *theta))
+        if self.left_interval_data is not None and self.right_interval_data is not None:
+            tmp = np.append(
+                tmp,
+                self.dist.logcdf(self.right_interval_data, *theta)
+                - self.dist.logcdf(self.left_interval_data, *theta),
+            )
+        return np.sum(tmp)
+
+    def nll(self, theta):
+        """Returns negative log-likelihood.
+
+        :param theta:
+        :return:
+        """
+        return -1 * self.ll(theta)
+
+    def fit(self):
+        """Fits distribution to provided data via Maximum Likelihood Estimation."""
+        pass
+
+
+class NormalDistribution(BaseDistribution):
+    pass
+
+
+class ExponentialDistribution(BaseDistribution):
+    pass
+
+
+class JohnsonSUDistribution(BaseDistribution):
+    pass
 
 
 class Distribution:
@@ -96,5 +171,3 @@ class Distribution:
         return -1 * self.ll(theta)
 
 
-class FlexDistribution:
-    """TODO: we may want to re-implement the distribution as a data collection that can switch it's distribution type on the fly."""

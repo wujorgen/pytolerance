@@ -6,6 +6,10 @@ iris = load_iris(as_frame=True)
 sepal_width = iris.data["sepal width (cm)"].values
 
 
+def test_normal_TL():
+    pass
+
+
 def test_TL_sepal_width():
     pass
     # upper 99/75: 3.441
