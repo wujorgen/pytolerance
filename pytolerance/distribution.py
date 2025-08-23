@@ -1,15 +1,36 @@
 from abc import ABC, abstractmethod
+
 import numpy as np
 import scipy
 from numpy.typing import ArrayLike
 from scipy.stats._distn_infrastructure import rv_continuous
 
 from .__info__ import AVAILABLE_DISTRIBUTIONS, EPS
+from .MLE import MLE
 
 
 class BaseDistribution(ABC):
-    """Abstract Base Class for Distribution objects. Must be extended to a specific distribution family."""
-    def __init__(self, data, left_censored_data, right_censored_data, left_interval_data, right_interval_data, conventional_form:bool=False):
+    """Abstract Base Class for Distribution objects.
+    Must be extended to a specific distribution family."""
+
+    def __init__(
+        self,
+        data,
+        left_censored_data=None,
+        right_censored_data=None,
+        left_interval_data=None,
+        right_interval_data=None,
+        conventional_form: bool = False,
+    ):
+        """Constructor for Distribution class.
+
+        :param data:
+        :param left_censored_data:
+        :param right_censored_data:
+        :param left_interval_data:
+        :param right_interval_data:
+        :param conventional_form:
+        """
         self.data = data
         self.left_censored_data = left_censored_data
         self.right_censored_data = right_censored_data
@@ -18,7 +39,7 @@ class BaseDistribution(ABC):
         self.conventional_form = conventional_form
         self._sol = None
         self._params = {}
-        self._cache_TL = {}  # cache the calculated tolerance limit values for future use, following convention of [U/L/D][confidence]/[coverage]
+        self._cache_TL = {}  # [U/L/D][confidence]/[coverage]
 
     @property
     @abstractmethod
@@ -33,8 +54,28 @@ class BaseDistribution(ABC):
     @property
     @abstractmethod
     def _MLEconstraints(self) -> list[dict]:
-        """Returns constraints on parameter feasibility needed for MLE.
+        """Returns constraints on parameter feasibility needed for MLE."""
+
+    @property
+    @abstractmethod
+    def _MLEx0(self) -> list:
+        """Returns the initial guess for MLE."""
+
+    def _calc_ll_target(self, confidence, sided=1, verbose: bool = False):
+        """Decrements the log likelihood for tolerance limit calculation.
+
+        :param confidence: between 0 and 1
+        :param sided: 1 or 2
         """
+        if self._sol is None:
+            pass  # TODO: throw error or run MLE
+        ll_mle = self._sol.fun * -1  # optimization problem minimizes nll
+        alpha_eff = 2 * (1 - confidence) / sided
+        if verbose:
+            print("alpha effective:", alpha_eff)
+        chi2val = scipy.stats.chi2.ppf(1 - alpha_eff, df=1)
+        ll_target = ll_mle - chi2val / 2
+        return ll_target
 
     def ll(self, theta):
         """Returns log-likelihood.
@@ -63,13 +104,119 @@ class BaseDistribution(ABC):
         """
         return -1 * self.ll(theta)
 
-    def fit(self):
+    def fit(self, verbose: bool = False):
         """Fits distribution to provided data via Maximum Likelihood Estimation."""
-        pass
+        self._sol = MLE.mle(self, "SLSQP", verbose)
+        # TODO: need logic to try other solvers/constraints in event of failure
+
+    def tl_upper(self, confidence, coverage):
+        """Calculates and caches the upper one-sided tolerance limit.
+        This is done by targeting a decremented log likelihood while maximizing the
+        percentile associated with the desired coverage.
+
+        :param confidence: in range 0 and 100
+        :param coverage: in range 0 and 100
+        """
+        ll_target = self._calc_ll_target(confidence, 1)
+
+    def tl_lower(self, confidence, coverage):
+        """Calculates and caches the lower one-sided tolerance limit.
+        This is done by targeting a decremented log likelihood while minimizing the
+        percentile associated with the desired coverage.
+
+        :param confidence: in range 0 and 100
+        :param coverage: in range 0 and 100
+        """
+        ll_target = self._calc_ll_target(confidence, 1)
+
+    def tl_double(self, confidence, coverage_low, coverage_high):
+        """Calculates and caches the two-sided tolerance limit.
+        This is done by targeting a decremented log likelihood while maximizing the
+        difference between the low and high percentiles.
+
+        :param confidence: in range 0 and 100
+        :param coverage: in range 0 and 100
+        """
+        ll_target = self._calc_ll_target(confidence, 2)
 
 
 class NormalDistribution(BaseDistribution):
-    pass
+    def __init__(
+        self,
+        data,
+        left_censored_data=None,
+        right_censored_data=None,
+        left_interval_data=None,
+        right_interval_data=None,
+        conventional_form: bool = False,
+    ):
+        super().__init__(
+            data,
+            left_censored_data,
+            right_censored_data,
+            left_interval_data,
+            right_interval_data,
+            conventional_form=conventional_form,
+        )
+
+    @property
+    def dist(self) -> rv_continuous:
+        """Returns a reference to the SciPy stats family."""
+        return scipy.stats.norm
+
+    @property
+    def params(self) -> dict:
+        """Returns a dict of the distribution parameters."""
+        return self.params
+
+    @property
+    def _MLEconstraints(self) -> list:
+        """Returns constraints on parameter feasibility needed for MLE.
+        The normal distribution does not have any requirements."""
+        return []
+
+    @property
+    def _MLEx0(self) -> list:
+        """Returns the initial guess for MLE."""
+        return [0, 1]
+
+    def tl_upper(self, confidence, coverage):
+        """Calculates and caches the upper one-sided tolerance limit.
+        An analytical solution is available for the normal distribution
+        when censored data is not present."""
+        if (
+            self.left_censored_data is None
+            and self.right_censored_data is None
+            and self.left_interval_data is None
+            and self.right_interval_data is None
+        ):
+            n = self.data.size
+            non_centrality = np.sqrt(n) * scipy.stats.norm.ppf(coverage)
+            k = (1 / np.sqrt(n)) * scipy.stats.nct.ppf(
+                confidence, n - 1, non_centrality
+            )
+            return self._sol.x[0] + k * self._sol.x[1]
+        else:
+            return super().tl_upper(confidence, coverage)
+
+    def tl_lower(self, confidence, coverage):
+        """Calculates and caches the lower one-sided tolerance limit.
+        An analytical solution is available for the normal distribution
+        when censored data is not present."""
+        if (
+            self.left_censored_data is None
+            and self.right_censored_data is None
+            and self.left_interval_data is None
+            and self.right_interval_data is None
+        ):
+            n = self.data.size
+            non_centrality = np.sqrt(n) * scipy.stats.norm.ppf(coverage)
+            k = (1 / np.sqrt(n)) * scipy.stats.nct.ppf(
+                confidence, n - 1, non_centrality
+            )
+            return self._sol.x[0] - k * self._sol.x[1]
+        else:
+            return super().tl_lower(confidence, coverage)
 
 
 class ExponentialDistribution(BaseDistribution):
@@ -169,5 +316,3 @@ class Distribution:
         :param theta:
         """
         return -1 * self.ll(theta)
-
-

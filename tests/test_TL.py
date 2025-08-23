@@ -1,16 +1,18 @@
 import numpy as np
 from sklearn.datasets import load_iris
-
+from pytolerance import NormalDistribution
 
 iris = load_iris(as_frame=True)
 sepal_width = iris.data["sepal width (cm)"].values
 
 
 def test_normal_TL():
-    pass
+    dataset = NormalDistribution(data=sepal_width)
+    dataset.fit()
+    assert dataset._sol.success, "MLE failed!"
 
 
-def test_TL_sepal_width():
+def test_normal_TL_sepal_width():
     pass
     # upper 99/75: 3.441
     # lower 99/25: 2.663
